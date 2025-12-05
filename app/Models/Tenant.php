@@ -109,4 +109,123 @@ class Tenant extends Model
             default => $this->slug,
         };
     }
+
+    /**
+     * Check if tenant uses custom domain
+     */
+    public function hasCustomDomain(): bool
+    {
+        return !empty($this->domain) && $this->identification_type === 'domain';
+    }
+
+    /**
+     * Check if custom domain is verified
+     */
+    public function isDomainVerified(): bool
+    {
+        return ($this->meta['domain_verified'] ?? false) === true;
+    }
+
+    /**
+     * Get full URL for tenant
+     */
+    public function getUrl(string $path = ''): string
+    {
+        $protocol = config('tenant.features.require_ssl') ? 'https://' : 'http://';
+        $domain = $this->getPrimaryDomain();
+
+        return $protocol . $domain . ($path ? '/' . ltrim($path, '/') : '');
+    }
+
+    /**
+     * Get primary domain for tenant
+     */
+    public function getPrimaryDomain(): string
+    {
+        if ($this->hasCustomDomain()) {
+            return $this->domain;
+        }
+
+        if ($this->identification_type === 'subdomain') {
+            return $this->subdomain . '.' . config('tenant.identification.central_domain');
+        }
+
+        // Path-based fallback to central domain
+        return config('tenant.identification.central_domain');
+    }
+
+    /**
+     * Set custom domain for tenant
+     */
+    public function setCustomDomain(string $domain): bool
+    {
+        $domainService = app(\App\Services\DomainService::class);
+        $validation = $domainService->validateDomain($domain);
+
+        if (!$validation['valid']) {
+            return false;
+        }
+
+        $this->update([
+            'domain' => $validation['domain'],
+            'identification_type' => 'domain',
+        ]);
+
+        // Generate verification token
+        $domainService->generateVerificationToken($this);
+
+        return true;
+    }
+
+    /**
+     * Remove custom domain
+     */
+    public function removeCustomDomain(): void
+    {
+        // Clear domain verification meta
+        $meta = $this->meta ?? [];
+        unset($meta['domain_verified'], $meta['domain_verified_at']);
+
+        // Clear domain settings
+        $settings = $this->settings ?? [];
+        unset($settings['domain_verification_token'], $settings['domain_verification_expires_at']);
+
+        $this->update([
+            'domain' => null,
+            'identification_type' => 'subdomain', // Fallback to subdomain
+            'meta' => $meta,
+            'settings' => $settings,
+        ]);
+    }
+
+    /**
+     * Get DNS instructions for custom domain setup
+     */
+    public function getDnsInstructions(): array
+    {
+        $domainService = app(\App\Services\DomainService::class);
+        return $domainService->getDnsInstructions($this);
+    }
+
+    /**
+     * Verify custom domain
+     */
+    public function verifyDomain(): bool
+    {
+        $domainService = app(\App\Services\DomainService::class);
+        return $domainService->verifyDomain($this);
+    }
+
+    /**
+     * Check SSL status for custom domain
+     */
+    public function checkSsl(): array
+    {
+        if (!$this->hasCustomDomain()) {
+            return ['has_ssl' => false, 'error' => 'No custom domain configured'];
+        }
+
+        $domainService = app(\App\Services\DomainService::class);
+        return $domainService->checkSsl($this->domain);
+    }
 }
