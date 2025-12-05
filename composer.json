@@ -34,7 +34,8 @@
             "Database\\Seeders\\": "database/seeders/"
         },
         "files": [
-            "app/Helpers/tenant.php"
+            "app/Helpers/tenant.php",
+            "app/Helpers/logging.php"
         ]
     },
     "autoload-dev": {

@@ -11,7 +11,10 @@ return Application::configure(basePath: dirname(__DIR__))
         health: '/up',
     )
     ->withMiddleware(function (Middleware $middleware) {
-        //
+        // Add tenant identification to web middleware group
+        $middleware->web(append: [
+            \App\Http\Middleware\IdentifyTenant::class,
+        ]);
     })
     ->withExceptions(function (Exceptions $exceptions) {
         //
